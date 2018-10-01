@@ -1,23 +1,17 @@
 [[source]]
-
 url = "https://pypi.python.org/simple"
 verify_ssl = true
 name = "pypi"
 
-
 [packages]
-
 pandas = "*"
 ccxt = "*"
 dash = "*"
 dash-html-components = "==0.12.0"
 dash-core-components = "==0.28.0"
-
+influxdb = "*"
 
 [dev-packages]
 
-
-
 [requires]
-
 python_version = "3.7"
