@@ -1,3 +1,5 @@
 {
-    "python.formatting.provider": "yapf"
+    "python.formatting.provider": "yapf",
+    "python.pythonPath": "/Users/zaizenkaegyoshi/.local/share/virtualenvs/dashboard-PEWls2eW/bin/python",
+    "python.linting.pylintEnabled": false
 }
