@@ -64,7 +64,6 @@ def stability(btc_price, usdt_price, process_rows=None):
             frames.append(frame)
         frames += [btc_price, usdt_price]
         res = pd.concat(frames, sort=True)
-        res = res.dropna()
         print(res.head())
         return res
 
