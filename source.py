@@ -40,13 +40,13 @@ def send_metric(metric, timestamp, value=None, fields=None):
             "time": (datetime.fromtimestamp(timestamp)).strftime('%Y-%m-%dT%H:%M:%SZ'),
             "fields": fields
         }]
-    return
+    # return
     influxdb.write_points(json_body)
 def send_all_metrics(metrics):
-    return
+    # return
     influxdb.write_points(metrics)
 
-def construct_metric(metric, timestamp, value=None, fields=None):
+def construct_metric(metric, timestamp, value=None, fields=None, tags=None):
     if value:
         json_body = [{
             "measurement": metric,
@@ -61,6 +61,8 @@ def construct_metric(metric, timestamp, value=None, fields=None):
             "time": (datetime.fromtimestamp(timestamp)).strftime('%Y-%m-%dT%H:%M:%SZ'),
             "fields": fields
         }]
+    if tags:
+        json_body[0]['tags'] = tags
     return json_body
 
 
@@ -90,12 +92,14 @@ class Source:
         self.triggers = [] # array of string ids
         self.timeout = 0.3
 
-    def fetch_historical(self, symbol, from_datetime='2017-10-01 00:00:00'):
+    def fetch_historical(self, symbol, from_datetime='2018-09-21 00:00:00'):
         msec = 1000
         minute = 60 * msec
         hold = 30
         exchange = self.exchange
-
+        if symbol not in self.exchange.markets:
+            return
+        metric = '.'.join([self.name, symbol, 'OHLCV5M'])
         from_timestamp = exchange.parse8601(from_datetime)
 
         # -----------------------------------------------------------------------------
@@ -105,6 +109,7 @@ class Source:
         # -----------------------------------------------------------------------------
 
         data = []
+        prev_timestamp = None
 
         while from_timestamp < now:
 
@@ -113,19 +118,31 @@ class Source:
                 print(exchange.milliseconds(), 'Fetching candles starting from', exchange.iso8601(from_timestamp))
                 ohlcvs = exchange.fetch_ohlcv(symbol, '5m', from_timestamp)
                 print(exchange.milliseconds(), 'Fetched', len(ohlcvs), 'candles')
+                if len(ohlcvs) == 0:
+                    break
                 first = ohlcvs[0][0]
                 last = ohlcvs[-1][0]
                 print('First candle epoch', first, exchange.iso8601(first))
                 print('Last candle epoch', last, exchange.iso8601(last))
                 from_timestamp += len(ohlcvs) * minute * 5
+                if prev_timestamp:
+                    if last == prev_timestamp:
+                        break
+                    prev_timestamp = last
+                else:
+                    prev_timestamp = last
                 data += ohlcvs
+                if len(data) > 200:
+                    self.send_candles(metric,data)
+                    data = []
                 time.sleep(0.7)
 
             except (ccxt.ExchangeError, ccxt.AuthenticationError, ccxt.ExchangeNotAvailable, ccxt.RequestTimeout) as error:
 
                 print('Got an error', type(error).__name__, error.args, ', retrying in', hold, 'seconds...')
                 time.sleep(hold)
-        self.send_candles(data)
+
+
 
 
     def send_market_price(self,id, orderbook):
@@ -202,7 +219,7 @@ class Source:
             'TUSD': 100000,
             'USDT': 100000,
         }
-        how_much = asset_amounts[base]
+        how_much = 100000000000.0 #asset_amounts[base]
 
         print(how_much)
         # orderbook = data[self.exchange][self.api_call][self.market]
@@ -233,15 +250,18 @@ class Source:
         name, market, func = id.split('.')
         metric = '.'.join([name, market, 'OHLCV5M'])
         metrics = []
-        for candle in candles:
+        for index, candle in enumerate(candles):
 
-            metrics += construct_metric(id, candle[0], fields={
+            metrics += construct_metric(metric, candle[0]/1000, fields={
                 'timestamp': candle[0],
-                'open': candle[1],
-                'high': candle[2],
-                'low': candle[3],
-                'close': candle[4],
-                'vol': candle[5],
+                'open': float(candle[1]),
+                'high': float(candle[2]),
+                'low': float(candle[3]),
+                'close': float(candle[4]),
+                'vol': float(candle[5]),
+            }, tags={
+                # 'timestamp': candle[0],
+                'id': index
             })
         send_all_metrics(metrics)
     def update(self):
@@ -269,7 +289,7 @@ class Source:
         threads = []
         for func in functions:
             if self.exchange.has[func]:
-                # print(self.name,'has',func)
+                print(self.name,'has',func)
                 # continue
                 for param in self.parameters[func]:
                     if param in self.exchange.markets:
@@ -278,24 +298,25 @@ class Source:
                         t.start()
                         threads.append(t)
                         # time.sleep(self.timeout)
-        [t.join() for t in threads]
+        [t.join(timeout=1) for t in threads]
         return data
 print("\n\n\n\n ### STARTING RUN ### \n\n\n--------------------------\n\n")
 exchanges = [
-    # 'binance',
-    # 'bittrex',
-    # 'hitbtc',
-    # 'coinbase',
+    'binance',
+    'bittrex',
+    'hitbtc',
+    'coinbase',
     'coinbasepro',
     'coinmarketcap',
     'bitstamp',
+
 ]
 parameters = {
 'fetchTicker':[],# ['TUSD/USDT','TUSD/BTC','TUSD/ETH', 'USDT/TUSD', 'BTC/TUSD','ETH/TUSD'],
-'fetchOrderBook':  ['TUSD/USDT', 'BTC/USDT', 'TUSD/BTC', 'BTC/USD', 'USDT/TUSD','TUSD/ETH'],
-'fetchOHLCV': [], #['TUSD/USDT', 'BTC/USDT', 'TUSD/BTC'],
+'fetchOrderBook':[],#  ['TUSD/USDT', 'BTC/USDT', 'TUSD/BTC', 'BTC/USD', 'USDT/TUSD','TUSD/ETH'],
+'fetchOHLCV': [],#['TUSD/USDT', 'BTC/USDT', 'TUSD/BTC', 'BTC/USD','ETH/USD'],
 'fetchTrades':[],# ['TUSD/USDT', 'BTC/USDT', 'TUSD/BTC'],
 }
 s = [Source(name, markets_to_run=parameters) for name in exchanges]
-# [a.update() for a in s]
-[a.fetch_historical('BTC/USD') for a in s]
+[a.update() for a in s]
+[[a.fetch_historical(market) for a in s] for market in parameters['fetchOHLCV']]
