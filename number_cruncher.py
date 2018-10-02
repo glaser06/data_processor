@@ -53,7 +53,8 @@ def stability(btc_price, usdt_price, process_rows=None):
     tusdbtc_keys = [binance_btc_key, bittrex_btc_key]
     tusdusdt_keys = [binance_usdt_key]
     print('start loops')
-    for key_sets in [tusdbtc_keys, tusdusdt_keys]:
+    for key_sets in [tusdbtc_keys,
+    tusdusdt_keys]:
         frames = []
         for key in key_sets:
             frame = pd_cli.query('select * from "{}" limit 5000 offset 0 '.format(key))
@@ -63,6 +64,7 @@ def stability(btc_price, usdt_price, process_rows=None):
             frames.append(frame)
         frames += [btc_price, usdt_price]
         res = pd.concat(frames, sort=True)
+        res = res.dropna()
         print(res.head())
         return res
 
