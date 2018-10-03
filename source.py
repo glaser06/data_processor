@@ -40,10 +40,10 @@ def send_metric(metric, timestamp, value=None, fields=None):
             "time": (datetime.fromtimestamp(timestamp)).strftime('%Y-%m-%dT%H:%M:%SZ'),
             "fields": fields
         }]
-    # return
+    return
     influxdb.write_points(json_body)
 def send_all_metrics(metrics):
-    # return
+    return
     influxdb.write_points(metrics)
 
 def construct_metric(metric, timestamp, value=None, fields=None, tags=None):
@@ -259,26 +259,32 @@ class Source:
                 'low': float(candle[3]),
                 'close': float(candle[4]),
                 'vol': float(candle[5]),
-            }, tags={
-                # 'timestamp': candle[0],
-                'id': index
             })
         send_all_metrics(metrics)
-    def update(self):
+    def update(self, forever=False):
 
-        def execute(func, param):
+        def execute(func, param,forever=False):
             # print('what')
-            id = '.'.join([self.name, param, func])
-            output = getattr(self.exchange, func)(param)
-            print('\n ',self.name, func, '\n ')
-            # print(output)
-            if func == 'fetchOrderBook':
-                self.send_market_price(id,output)
-                self.send_orderbook(id, output)
-                self.send_liquidity(id, output)
-            elif func == 'fetchOHLCV':
-                self.send_candles(id,output)
-            print('worked?', self.name, func, param)
+            while True:
+                id = '.'.join([self.name, param, func])
+                output = getattr(self.exchange, func)(param)
+                print('\n ',self.name, func, '\n ')
+                # print(output)
+                if func == 'fetchOrderBook':
+                    self.send_market_price(id,output)
+                    self.send_orderbook(id, output)
+                    self.send_liquidity(id, output)
+                elif func == 'fetchOHLCV':
+                    self.send_candles(id,output)
+                elif func == 'fetchTicker':
+                    pass
+                elif func == 'fetchTrades':
+                    pass
+                print('worked?', self.name, func, param)
+                if not forever:
+                    return
+
+
             # send_metric(id,  time.time(), fields=output)
             # print('Output',self.delegate.big_data['Output'])
 
@@ -288,35 +294,38 @@ class Source:
         functions = self.functions
         threads = []
         for func in functions:
-            if self.exchange.has[func]:
+            if self.exchange.has[func] and self.exchange.has[func] != 'emulated':
                 print(self.name,'has',func)
                 # continue
                 for param in self.parameters[func]:
                     if param in self.exchange.markets:
 
-                        t = th.Thread(target=execute, args=(func, param))
+                        t = th.Thread(target=execute, args=(func, param, forever))
                         t.start()
                         threads.append(t)
                         # time.sleep(self.timeout)
         [t.join(timeout=1) for t in threads]
         return data
+    def lool(self):
+        self.update()
+        time.sleep(1)
 print("\n\n\n\n ### STARTING RUN ### \n\n\n--------------------------\n\n")
 exchanges = [
     'binance',
     'bittrex',
     'hitbtc',
-    'coinbase',
+    # 'coinbase',
     'coinbasepro',
-    'coinmarketcap',
+    # 'coinmarketcap',
     'bitstamp',
 
 ]
 parameters = {
 'fetchTicker':[],# ['TUSD/USDT','TUSD/BTC','TUSD/ETH', 'USDT/TUSD', 'BTC/TUSD','ETH/TUSD'],
-'fetchOrderBook':[],#  ['TUSD/USDT', 'BTC/USDT', 'TUSD/BTC', 'BTC/USD', 'USDT/TUSD','TUSD/ETH'],
-'fetchOHLCV': [],#['TUSD/USDT', 'BTC/USDT', 'TUSD/BTC', 'BTC/USD','ETH/USD'],
+'fetchOrderBook':  ['TUSD/USDT', 'BTC/USDT', 'TUSD/BTC', 'BTC/USD', 'USDT/TUSD','TUSD/ETH'],
+'fetchOHLCV': ['TUSD/USDT', 'BTC/USDT', 'TUSD/BTC', 'BTC/USD','ETH/USD'],
 'fetchTrades':[],# ['TUSD/USDT', 'BTC/USDT', 'TUSD/BTC'],
 }
 s = [Source(name, markets_to_run=parameters) for name in exchanges]
-[a.update() for a in s]
-[[a.fetch_historical(market) for a in s] for market in parameters['fetchOHLCV']]
+[a.update(forever=False) for a in s]
+# [[a.fetch_historical(market) for a in s] for market in parameters['fetchOHLCV']]

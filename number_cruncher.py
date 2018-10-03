@@ -39,7 +39,7 @@ def standard_deviation():
     pass
 def load_prices():
     btc_price = price_cli.query('SELECT * FROM "price.BTC"  order by time desc limit 50000 offset 0')['price.BTC']
-    btc_price['btc_price'] = btc_price['value']
+    btc_price['btc_price'] = btc_price['value'] 
     usdt_price = price_cli.query('SELECT * FROM "price.USDT"  order by time desc limit 50000 offset 0')['price.USDT']
     usdt_price['usdt_price'] = usdt_price['value']
     return btc_price, usdt_price
